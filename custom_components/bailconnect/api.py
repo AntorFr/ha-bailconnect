@@ -266,7 +266,7 @@ class BaillConnectApiClient:
         """
         return await self.api_post(
             f"/regulations/{self._regulation_id}",
-            {"key": f"thermostats.{thermostat_id}.{key}", "value": value},
+            {f"thermostats.{thermostat_id}.{key}": value},
         )
 
     async def set_thermostat_on(
@@ -275,13 +275,13 @@ class BaillConnectApiClient:
         """Turn a thermostat on or off."""
         return await self.api_post(
             f"/regulations/{self._regulation_id}",
-            {"key": f"thermostats.{thermostat_id}.is_on", "value": is_on},
+            {f"thermostats.{thermostat_id}.is_on": is_on},
         )
 
     async def set_regulation_mode(self, mode: int) -> dict | None:
         """Set the global HVAC mode (uc_mode).
 
-        Known values (to be confirmed):
+        Known values:
             0 = stop/off
             1 = heat
             2 = cool
@@ -289,7 +289,7 @@ class BaillConnectApiClient:
         """
         return await self.api_post(
             f"/regulations/{self._regulation_id}",
-            {"key": "uc_mode", "value": mode},
+            {"uc_mode": mode},
         )
 
     async def close(self) -> None:
