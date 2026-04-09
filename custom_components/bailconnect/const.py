@@ -6,7 +6,9 @@ DOMAIN = "bailconnect"
 BASE_URL = "https://www.baillconnect.com"
 LOGIN_URL = "/client/connexion"
 
-DEFAULT_SCAN_INTERVAL = timedelta(seconds=60)
+DEFAULT_SCAN_INTERVAL = timedelta(minutes=5)
+
+CONF_SCAN_INTERVAL = "scan_interval"
 
 # Temperature bounds (Celsius) — matches uc_hot_min/max and uc_cold_min/max
 MIN_TEMP = 16

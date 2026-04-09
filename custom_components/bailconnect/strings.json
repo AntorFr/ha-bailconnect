@@ -25,5 +25,15 @@
       "already_configured": "This account is already configured.",
       "reauth_successful": "Re-authentication successful."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BaillConnect Options",
+        "data": {
+          "scan_interval": "Scan interval (seconds)"
+        }
+      }
+    }
   }
 }
