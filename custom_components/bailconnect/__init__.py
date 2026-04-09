@@ -17,7 +17,7 @@ from .coordinator import BaillConnectCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.CLIMATE]
+PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR, Platform.SELECT, Platform.SWITCH]
 
 type BaillConnectConfigEntry = ConfigEntry
 

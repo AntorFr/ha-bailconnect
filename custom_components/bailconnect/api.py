@@ -292,6 +292,13 @@ class BaillConnectApiClient:
             {"uc_mode": mode},
         )
 
+    async def set_regulation_on(self, is_on: bool) -> dict | None:
+        """Turn the regulation system on or off (ui_on)."""
+        return await self.api_post(
+            f"/regulations/{self._regulation_id}",
+            {"ui_on": is_on},
+        )
+
     async def close(self) -> None:
         """Close the underlying HTTP session."""
         await self._session.close()

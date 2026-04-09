@@ -107,13 +107,15 @@ class BaillConnectClimate(CoordinatorEntity[BaillConnectCoordinator], ClimateEnt
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Group all thermostats under one device."""
+        """Return device info — one device per thermostat."""
+        th = self._thermostat
         reg = self._regulation
         return DeviceInfo(
-            identifiers={(DOMAIN, str(reg.regulation_id))},
-            name="BaillConnect",
+            identifiers={(DOMAIN, f"thermostat_{self._thermostat_id}")},
+            name=th.name if th else f"Thermostat {self._thermostat_id}",
             manufacturer="Baillindustrie",
-            model="BaillConnect Zoning",
+            model="BaillConnect Thermostat",
+            via_device=(DOMAIN, str(reg.regulation_id)) if reg else None,
         )
 
     @property
