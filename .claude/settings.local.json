@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.baillconnect.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}
