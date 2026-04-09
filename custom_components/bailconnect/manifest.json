@@ -1,0 +1,12 @@
+{
+  "domain": "bailconnect",
+  "name": "BaillConnect",
+  "version": "0.1.0",
+  "documentation": "https://github.com/berard/ha-bailconnect",
+  "issue_tracker": "https://github.com/berard/ha-bailconnect/issues",
+  "codeowners": ["@berard"],
+  "config_flow": true,
+  "iot_class": "cloud_polling",
+  "requirements": ["beautifulsoup4>=4.12.0"],
+  "integration_type": "hub"
+}

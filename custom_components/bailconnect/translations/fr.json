@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion à BaillConnect",
+        "description": "Entrez vos identifiants de compte BaillConnect.",
+        "data": {
+          "email": "Email",
+          "password": "Mot de passe"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnexion à BaillConnect",
+        "data": {
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Email ou mot de passe invalide.",
+      "cannot_connect": "Impossible de se connecter à BaillConnect. Vérifiez votre réseau.",
+      "unknown": "Une erreur inattendue s'est produite."
+    },
+    "abort": {
+      "already_configured": "Ce compte est déjà configuré.",
+      "reauth_successful": "Reconnexion réussie."
+    }
+  }
+}
