@@ -9,6 +9,8 @@ from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
     HVACMode,
+    PRESET_COMFORT,
+    PRESET_ECO,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
@@ -18,20 +20,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import ThermostatData
-from .const import DOMAIN, HVAC_TO_UC_MODE, MAX_TEMP, MIN_TEMP, TEMP_STEP, UC_MODE_TO_HVAC
+from .const import DOMAIN, MAX_TEMP, MIN_TEMP, TEMP_STEP, UC_MODE_COOL
 from .coordinator import BaillConnectCoordinator
 
 _LOGGER = logging.getLogger(__name__)
-
-# Map uc_mode int → HA HVACMode enum
-_UC_TO_HA: dict[int, HVACMode] = {
-    0: HVACMode.OFF,
-    1: HVACMode.HEAT,
-    2: HVACMode.COOL,
-    3: HVACMode.DRY,
-}
-
-_HA_TO_UC: dict[HVACMode, int] = {v: k for k, v in _UC_TO_HA.items()}
 
 
 async def async_setup_entry(
@@ -50,22 +42,26 @@ async def async_setup_entry(
 
 
 class BaillConnectClimate(CoordinatorEntity[BaillConnectCoordinator], ClimateEntity):
-    """A climate entity representing one BaillConnect thermostat."""
+    """A climate entity representing one BaillConnect thermostat.
+
+    The HVAC mode (heat/cool/dry/fan) is managed globally on the regulation
+    device via a Select entity.  Each thermostat only controls:
+      - on / off  (hvac_mode OFF vs AUTO)
+      - comfort / eco preset  (t1_t2 = 1 or 2)
+      - target temperature for the active setpoint
+    """
 
     _attr_has_entity_name = True
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = TEMP_STEP
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.PRESET_MODE
         | ClimateEntityFeature.TURN_ON
         | ClimateEntityFeature.TURN_OFF
     )
-    _attr_hvac_modes = [
-        HVACMode.OFF,
-        HVACMode.HEAT,
-        HVACMode.COOL,
-        HVACMode.DRY,
-    ]
+    _attr_hvac_modes = [HVACMode.OFF, HVACMode.AUTO]
+    _attr_preset_modes = [PRESET_COMFORT, PRESET_ECO]
 
     def __init__(
         self,
@@ -94,6 +90,12 @@ class BaillConnectClimate(CoordinatorEntity[BaillConnectCoordinator], ClimateEnt
     def _regulation(self):
         """Shortcut to the regulation data."""
         return self.coordinator.data
+
+    @property
+    def _is_cooling(self) -> bool:
+        """Return True if the global system is in cool mode."""
+        reg = self._regulation
+        return reg is not None and reg.uc_mode == UC_MODE_COOL
 
     # ------------------------------------------------------------------
     # Entity properties
@@ -132,17 +134,19 @@ class BaillConnectClimate(CoordinatorEntity[BaillConnectCoordinator], ClimateEnt
 
     @property
     def hvac_mode(self) -> HVACMode:
-        """Return the current HVAC mode.
-
-        If the thermostat is off locally, report OFF regardless of system mode.
-        """
+        """Return OFF if the thermostat is off, AUTO otherwise."""
         th = self._thermostat
         if th is None or not th.is_on:
             return HVACMode.OFF
-        reg = self._regulation
-        if reg is None or not reg.ui_on:
-            return HVACMode.OFF
-        return _UC_TO_HA.get(reg.uc_mode, HVACMode.OFF)
+        return HVACMode.AUTO
+
+    @property
+    def preset_mode(self) -> str | None:
+        """Return the current preset (comfort or eco)."""
+        th = self._thermostat
+        if th is None or not th.is_on:
+            return None
+        return PRESET_COMFORT if th.t1_t2 == 1 else PRESET_ECO
 
     @property
     def current_temperature(self) -> float | None:
@@ -152,29 +156,25 @@ class BaillConnectClimate(CoordinatorEntity[BaillConnectCoordinator], ClimateEnt
 
     @property
     def target_temperature(self) -> float | None:
-        """Return the active setpoint based on current mode and comfort/eco.
+        """Return the active setpoint based on global mode and preset.
 
-        T1 = comfort setpoint, T2 = eco setpoint.
-        The active one depends on the thermostat's t1_t2 field.
+        Cool mode → setpoint_cool_t1 / t2
+        Other modes → setpoint_hot_t1 / t2
+        t1_t2=1 → comfort (T1), t1_t2=2 → eco (T2)
         """
         th = self._thermostat
         if th is None:
             return None
-        reg = self._regulation
-        if reg is None:
-            return None
 
-        is_cooling = reg.uc_mode == 2  # cool mode
-        if is_cooling:
+        if self._is_cooling:
             return th.setpoint_cool_t1 if th.t1_t2 == 1 else th.setpoint_cool_t2
-        # heat, dry, or off — use hot setpoints
         return th.setpoint_hot_t1 if th.t1_t2 == 1 else th.setpoint_hot_t2
 
     @property
     def min_temp(self) -> float:
         """Return the minimum temperature."""
         reg = self._regulation
-        if reg and reg.uc_mode == 2:
+        if reg and self._is_cooling:
             return reg.uc_cold_min
         return reg.uc_hot_min if reg else MIN_TEMP
 
@@ -182,7 +182,7 @@ class BaillConnectClimate(CoordinatorEntity[BaillConnectCoordinator], ClimateEnt
     def max_temp(self) -> float:
         """Return the maximum temperature."""
         reg = self._regulation
-        if reg and reg.uc_mode == 2:
+        if reg and self._is_cooling:
             return reg.uc_cold_max
         return reg.uc_hot_max if reg else MAX_TEMP
 
@@ -191,40 +191,31 @@ class BaillConnectClimate(CoordinatorEntity[BaillConnectCoordinator], ClimateEnt
     # ------------------------------------------------------------------
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Set the HVAC mode (system-wide)."""
-        if hvac_mode == HVACMode.OFF:
-            # Turn off this thermostat
-            await self.coordinator.client.set_thermostat_on(
-                self._thermostat_id, False
-            )
-        else:
-            # Ensure thermostat is on
-            th = self._thermostat
-            if th and not th.is_on:
-                await self.coordinator.client.set_thermostat_on(
-                    self._thermostat_id, True
-                )
-            # Set system mode
-            uc_mode = _HA_TO_UC.get(hvac_mode)
-            if uc_mode is not None:
-                await self.coordinator.client.set_regulation_mode(uc_mode)
+        """Turn the thermostat on (AUTO) or off (OFF)."""
+        await self.coordinator.client.set_thermostat_on(
+            self._thermostat_id, hvac_mode != HVACMode.OFF
+        )
+        await self.coordinator.async_request_refresh()
 
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
+        """Switch between comfort (T1) and eco (T2) presets."""
+        t1_t2 = 1 if preset_mode == PRESET_COMFORT else 2
+        await self.coordinator.client.set_thermostat_t1_t2(
+            self._thermostat_id, t1_t2
+        )
         await self.coordinator.async_request_refresh()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set the target temperature for this thermostat."""
+        """Set the target temperature for the active setpoint."""
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
 
         th = self._thermostat
-        reg = self._regulation
-        if th is None or reg is None:
+        if th is None:
             return
 
-        # Determine which setpoint key to update
-        is_cooling = reg.uc_mode == 2
-        if is_cooling:
+        if self._is_cooling:
             key = "setpoint_cool_t1" if th.t1_t2 == 1 else "setpoint_cool_t2"
         else:
             key = "setpoint_hot_t1" if th.t1_t2 == 1 else "setpoint_hot_t2"

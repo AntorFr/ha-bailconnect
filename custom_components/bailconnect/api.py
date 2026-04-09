@@ -278,6 +278,15 @@ class BaillConnectApiClient:
             {f"thermostats.{thermostat_id}.is_on": is_on},
         )
 
+    async def set_thermostat_t1_t2(
+        self, thermostat_id: int, t1_t2: int
+    ) -> dict | None:
+        """Set thermostat preset: 1=comfort (T1), 2=eco (T2)."""
+        return await self.api_post(
+            f"/regulations/{self._regulation_id}",
+            {f"thermostats.{thermostat_id}.t1_t2": t1_t2},
+        )
+
     async def set_regulation_mode(self, mode: int) -> dict | None:
         """Set the global HVAC mode (uc_mode).
 

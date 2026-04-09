@@ -16,8 +16,8 @@ from .coordinator import BaillConnectCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-# Options displayed in the select (excluding "off" — handled by the switch)
-MODE_OPTIONS = ["heat", "cool", "dry"]
+# Options displayed in the select
+MODE_OPTIONS = ["heat", "cool", "dry", "fan"]
 
 
 async def async_setup_entry(
