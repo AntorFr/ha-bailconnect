@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
+    HVACAction,
     HVACMode,
     PRESET_COMFORT,
     PRESET_ECO,
@@ -141,6 +142,35 @@ class BaillConnectClimate(CoordinatorEntity[BaillConnectCoordinator], ClimateEnt
         return HVACMode.AUTO
 
     @property
+    def hvac_action(self) -> HVACAction | None:
+        """Return the current HVAC action for this thermostat.
+
+        This mirrors the web UI logic: fan bars are active only when
+        the thermostat motor is opening/open (motor_state 5 or 6).
+        """
+        th = self._thermostat
+        reg = self._regulation
+        if th is None or reg is None:
+            return None
+
+        if not th.is_on or not reg.ui_on or reg.uc_mode == 0:
+            return HVACAction.OFF
+
+        motor_open_or_opening = th.motor_state in (5, 6)
+        if not motor_open_or_opening:
+            return HVACAction.IDLE
+
+        if reg.uc_mode == UC_MODE_COOL:
+            return HVACAction.COOLING
+        if reg.uc_mode == 2:
+            return HVACAction.HEATING
+        if reg.uc_mode == 3:
+            return HVACAction.DRYING
+        if reg.uc_mode == 4:
+            return HVACAction.FAN
+        return HVACAction.IDLE
+
+    @property
     def preset_mode(self) -> str | None:
         """Return the current preset (comfort or eco)."""
         th = self._thermostat
@@ -185,6 +215,30 @@ class BaillConnectClimate(CoordinatorEntity[BaillConnectCoordinator], ClimateEnt
         if reg and self._is_cooling:
             return reg.uc_cold_max
         return reg.uc_hot_max if reg else MAX_TEMP
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose advanced thermostat details from BaillConnect."""
+        th = self._thermostat
+        reg = self._regulation
+        if th is None or reg is None:
+            return {}
+
+        motor_open_or_opening = th.motor_state in (5, 6)
+        raw_fan = reg.raw.get("ui_fan")
+        fan_bars_active = raw_fan if motor_open_or_opening and reg.ui_on and reg.uc_mode != 0 else 0
+
+        return {
+            "thermostat_is_on": th.is_on,
+            "motor_state": th.motor_state,
+            "motor_open_or_opening": motor_open_or_opening,
+            "regulation_ui_on": reg.ui_on,
+            "regulation_uc_mode": reg.uc_mode,
+            "regulation_ui_fan": raw_fan,
+            "fan_bars_active": fan_bars_active,
+            "battery_low": th.is_battery_low,
+            "thermostat_connected": th.is_connected,
+        }
 
     # ------------------------------------------------------------------
     # Climate actions

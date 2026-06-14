@@ -1,7 +1,7 @@
 {
   "domain": "bailconnect",
   "name": "BaillConnect",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "documentation": "https://github.com/berard/ha-bailconnect",
   "issue_tracker": "https://github.com/berard/ha-bailconnect/issues",
   "codeowners": ["@berard"],
