@@ -148,7 +148,7 @@ class BaillConnectApiClient:
             token_input = soup.find("input", {"name": "_token"})
             if token_input is None:
                 raise ParsingError("CSRF _token not found on login page")
-            self._csrf_token = token_input.get("value", "")
+            login_token = token_input.get("value", "")
 
             # Step 2 — POST credentials
             xsrf_value = self._get_xsrf_cookie_value()
@@ -157,7 +157,7 @@ class BaillConnectApiClient:
                 headers["X-XSRF-TOKEN"] = xsrf_value
 
             payload = {
-                "_token": self._csrf_token,
+                "_token": login_token,
                 "email": self._email,
                 "password": self._password,
             }
@@ -170,6 +170,7 @@ class BaillConnectApiClient:
                 allow_redirects=True,
             ) as resp:
                 final_url = str(resp.url)
+                final_html = await resp.text()
                 _LOGGER.debug(
                     "Post-login redirect: %s (HTTP %s)", final_url, resp.status
                 )
@@ -184,6 +185,11 @@ class BaillConnectApiClient:
                 match = re.search(r"/regulations/(\d+)", final_url)
                 if match:
                     self._regulation_id = int(match.group(1))
+
+                # API writes require the CSRF token from the authenticated dashboard
+                self._csrf_token = self._get_csrf_meta_token(final_html)
+                if not self._csrf_token:
+                    await self._refresh_csrf_token()
 
                 _LOGGER.info(
                     "Authenticated (regulation_id=%s, dashboard=%s)",
@@ -227,7 +233,9 @@ class BaillConnectApiClient:
         html = await self.fetch_page()
         return self._parse_regulation(html)
 
-    async def api_post(self, path: str, data: dict) -> dict | None:
+    async def api_post(
+        self, path: str, data: dict, retry_on_csrf_error: bool = True
+    ) -> dict | None:
         """Send a POST request to the /api-client endpoint.
 
         Returns the JSON response body, or None if no JSON body.
@@ -251,7 +259,18 @@ class BaillConnectApiClient:
 
                 _LOGGER.debug("API response: HTTP %s", resp.status)
                 if resp.content_type and "json" in resp.content_type:
-                    return await resp.json()
+                    body = await resp.json()
+                    if body.get("error") == 419:
+                        if retry_on_csrf_error:
+                            _LOGGER.warning(
+                                "API returned 419, refreshing CSRF token and retrying"
+                            )
+                            await self._refresh_csrf_token()
+                            return await self.api_post(
+                                path, data, retry_on_csrf_error=False
+                            )
+                        raise AuthenticationError("API CSRF token rejected (419)")
+                    return body
                 return None
         except aiohttp.ClientError as err:
             raise CannotConnect(f"API error: {err}") from err
@@ -319,6 +338,14 @@ class BaillConnectApiClient:
     async def _ensure_authenticated(self) -> None:
         if not self._authenticated:
             await self.authenticate()
+
+    async def _refresh_csrf_token(self) -> None:
+        """Refresh CSRF token from the authenticated dashboard page."""
+        html = await self.fetch_page()
+        token = self._get_csrf_meta_token(html)
+        if not token:
+            raise ParsingError("CSRF meta token not found on dashboard")
+        self._csrf_token = token
 
     def _get_xsrf_cookie_value(self) -> str | None:
         """Extract and URL-decode the XSRF-TOKEN cookie value."""
