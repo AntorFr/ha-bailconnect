@@ -45,6 +45,7 @@ class BaillConnectCoordinator(DataUpdateCoordinator[RegulationData]):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=DOMAIN,
             update_interval=_get_scan_interval(entry),
         )

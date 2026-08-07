@@ -1,9 +1,9 @@
 {
   "domain": "bailconnect",
   "name": "BaillConnect",
-  "version": "0.1.2",
-  "documentation": "https://github.com/berard/ha-bailconnect",
-  "issue_tracker": "https://github.com/berard/ha-bailconnect/issues",
+  "version": "0.1.3",
+  "documentation": "https://github.com/AntorFr/ha-bailconnect",
+  "issue_tracker": "https://github.com/AntorFr/ha-bailconnect/issues",
   "codeowners": ["@berard"],
   "config_flow": true,
   "iot_class": "cloud_polling",
